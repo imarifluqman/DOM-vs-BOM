@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DOM & BOM — JavaScript Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dom-color: #00e5ff;
+    --bom-color: #ff6b35;
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --text: #e8e8f0;
+    --text-muted: #6b6b88;
+    --border: rgba(255,255,255,0.07);
+    --glow-dom: rgba(0, 229, 255, 0.15);
+    --glow-bom: rgba(255, 107, 53, 0.15);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hero {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4rem 2rem;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    width: 800px; height: 800px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,255,0.06) 0%, transparent 70%);
+    top: 50%; left: 30%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,107,53,0.06) 0%, transparent 70%);
+    top: 50%; left: 70%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .hero-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    color: var(--dom-color);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.2s;
+  }
+  .hero h1 {
+    font-size: clamp(3rem, 8vw, 7rem);
+    font-weight: 800;
+    line-height: 0.95;
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.4s;
+  }
+  .hero h1 span.dom { color: var(--dom-color); }
+  .hero h1 span.amp { color: var(--text-muted); }
+  .hero h1 span.bom { color: var(--bom-color); }
+  .hero p {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    max-width: 500px;
+    line-height: 1.7;
+    margin-bottom: 3rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.6s;
+  }
+  .hero-pills {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.8s;
+  }
+  .pill {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    padding: 0.5rem 1.2rem;
+    border-radius: 999px;
+    border: 1px solid;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .pill.dom { border-color: var(--dom-color); color: var(--dom-color); }
+  .pill.dom:hover { background: var(--dom-color); color: var(--bg); }
+  .pill.bom { border-color: var(--bom-color); color: var(--bom-color); }
+  .pill.bom:hover { background: var(--bom-color); color: var(--bg); }
+  .pill.neutral { border-color: var(--text-muted); color: var(--text-muted); }
+  .pill.neutral:hover { background: var(--text-muted); color: var(--bg); }
+  .scroll-hint {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.2em;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 1.2s;
+  }
+  .scroll-hint::after {
+    content: '';
+    width: 1px;
+    height: 40px;
+    background: linear-gradient(to bottom, var(--text-muted), transparent);
+    animation: scrollPulse 1.5s ease infinite;
+  }
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+  section { padding: 6rem 0; }
+  .section-header { margin-bottom: 3rem; }
+  .section-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+  .section-badge.dom { background: var(--glow-dom); color: var(--dom-color); border: 1px solid rgba(0,229,255,0.2); }
+  .section-badge.bom { background: var(--glow-bom); color: var(--bom-color); border: 1px solid rgba(255,107,53,0.2); }
+  .section-badge.neutral { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); }
+  .section-header h2 {
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 1rem;
+  }
+  .section-header p {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1.8;
+    max-width: 600px;
+  }
+  .dom-text { color: var(--dom-color); }
+  .bom-text { color: var(--bom-color); }
+  .muted-text { color: var(--text-muted); }
+  .concept-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+  @media (max-width: 700px) { .concept-grid { grid-template-columns: 1fr; } }
+  .concept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .concept-card:hover { transform: translateY(-3px); }
+  .concept-card.dom:hover { box-shadow: 0 8px 40px var(--glow-dom); }
+  .concept-card.bom:hover { box-shadow: 0 8px 40px var(--glow-bom); }
+  .concept-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .concept-card.dom::before { background: linear-gradient(90deg, var(--dom-color), transparent); }
+  .concept-card.bom::before { background: linear-gradient(90deg, var(--bom-color), transparent); }
+  .card-icon { font-size: 2rem; margin-bottom: 1rem; }
+  .card-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .card-desc { color: var(--text-muted); font-size: 0.95rem; line-height: 1.7; margin-bottom: 1.5rem; }
+  .card-meta { display: flex; flex-direction: column; gap: 0.5rem; }
+  .meta-row { display: flex; gap: 0.75rem; align-items: flex-start; font-size: 0.85rem; }
+  .meta-key { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text-muted); min-width: 70px; padding-top: 1px; }
+  .code-block {
+    background: #0d0d14;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 2rem 0;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1.2rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .code-dots { display: flex; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+  .code-title { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text-muted); }
+  pre {
+    padding: 1.5rem;
+    overflow-x: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+  }
+  .kw { color: #ff79c6; }
+  .fn { color: #50fa7b; }
+  .str { color: #f1fa8c; }
+  .cm { color: #6272a4; font-style: italic; }
+  .obj { color: #8be9fd; }
+  .num { color: #bd93f9; }
+  .dom-h { color: var(--dom-color); }
+  .bom-h { color: var(--bom-color); }
+  .tree-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin: 2rem 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.82rem;
+  }
+  .tree-title { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 1.5rem; }
+  .tree-node { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; }
+  .tree-indent { color: var(--border); user-select: none; }
+  .node-tag { padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+  .node-tag.window { background: rgba(255,255,255,0.08); color: #f8f8f2; }
+  .node-tag.document { background: var(--glow-dom); color: var(--dom-color); }
+  .node-tag.html { background: rgba(0,229,255,0.08); color: #88d9e6; }
+  .node-tag.dom-el { background: rgba(0,229,255,0.05); color: #6ecfdd; }
+  .node-tag.bom-el { background: var(--glow-bom); color: var(--bom-color); }
+  .node-label { color: var(--text-muted); font-size: 0.75rem; }
+  .demo-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin: 2rem 0;
+  }
+  .demo-header {
+    padding: 1rem 1.5rem;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .demo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dom-color); animation: pulse 2s infinite; }
+  .demo-dot.bom { background: var(--bom-color); }
+  .demo-body { padding: 2rem; }
+  .demo-controls { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.78rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 700;
+  }
+  .btn.dom { background: rgba(0,229,255,0.12); color: var(--dom-color); border: 1px solid rgba(0,229,255,0.25); }
+  .btn.dom:hover { background: rgba(0,229,255,0.25); transform: translateY(-1px); }
+  .btn.bom { background: rgba(255,107,53,0.12); color: var(--bom-color); border: 1px solid rgba(255,107,53,0.25); }
+  .btn.bom:hover { background: rgba(255,107,53,0.25); transform: translateY(-1px); }
+  .btn.clear { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); }
+  .btn.clear:hover { background: rgba(255,255,255,0.1); }
+  .demo-output {
+    background: #0d0d14;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    min-height: 120px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+  }
+  .log-line { display: flex; gap: 0.75rem; align-items: flex-start; }
+  .log-time { color: var(--text-muted); font-size: 0.72rem; min-width: 60px; padding-top: 2px; }
+  .log-tag { font-size: 0.7rem; padding: 1px 6px; border-radius: 3px; font-weight: 700; min-width: 40px; text-align: center; }
+  .log-tag.dom { background: var(--glow-dom); color: var(--dom-color); }
+  .log-tag.bom { background: var(--glow-bom); color: var(--bom-color); }
+  .log-msg { color: var(--text); word-break: break-all; }
+  .api-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+  .api-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .api-card:hover { transform: translateY(-2px); }
+  .api-card.dom:hover { box-shadow: 0 4px 20px var(--glow-dom); }
+  .api-card.bom:hover { box-shadow: 0 4px 20px var(--glow-bom); }
+  .api-name { font-family: 'Space Mono', monospace; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.4rem; }
+  .api-name.dom { color: var(--dom-color); }
+  .api-name.bom { color: var(--bom-color); }
+  .api-desc { color: var(--text-muted); font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.75rem; }
+  .api-example {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    background: #0d0d14;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    color: #a8f0c0;
+    border: 1px solid var(--border);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .compare-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin: 2rem 0;
+  }
+  .compare-table th {
+    padding: 1.2rem 1.5rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: left;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-table th.dom-col { color: var(--dom-color); }
+  .compare-table th.bom-col { color: var(--bom-color); }
+  .compare-table th:first-child { color: var(--text-muted); width: 25%; }
+  .compare-table td {
+    padding: 1rem 1.5rem;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.6;
+  }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table td:first-child { color: var(--text-muted); font-family: 'Space Mono', monospace; font-size: 0.8rem; }
+  .compare-table td.dom-val { color: #a8ecf7; }
+  .compare-table td.bom-val { color: #f7c7b0; }
+  .compare-table tr:hover td { background: rgba(255,255,255,0.02); }
+  footer {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--border);
+    padding: 3rem 0;
+    text-align: center;
+  }
+  .footer-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+  .footer-sub { font-family: 'Space Mono', monospace; font-size: 0.8rem; color: var(--text-muted); }
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); margin: 0; }
+  #demo-box {
+    padding: 1.5rem;
+    border-radius: 10px;
+    background: rgba(0,229,255,0.05);
+    border: 1px dashed rgba(0,229,255,0.2);
+    margin-bottom: 1rem;
+    transition: all 0.4s ease;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .fade-in {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  @keyframes scrollPulse {
+    0%, 100% { opacity: 1; height: 40px; }
+    50% { opacity: 0.3; height: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-label">JavaScript Internals · Web APIs</div>
+  <h1>
+    <span class="dom">DOM</span>
+    <span class="amp"> &amp; </span>
+    <span class="bom">BOM</span>
+  </h1>
+  <p>Two fundamental browser APIs. One controls the page. The other controls the browser. Master both — master the web.</p>
+  <div class="hero-pills">
+    <a href="#dom-section" class="pill dom">→ DOM</a>
+    <a href="#bom-section" class="pill bom">→ BOM</a>
+    <a href="#compare" class="pill neutral">→ Compare</a>
+    <a href="#playground" class="pill neutral">→ Playground</a>
+  </div>
+  <div class="scroll-hint">SCROLL</div>
+</section>
+
+<div class="container fade-in">
+  <div class="concept-grid">
+    <div class="concept-card dom">
+      <div class="card-icon">🌲</div>
+      <div class="card-title"><span class="dom-text">Document Object Model</span></div>
+      <div class="card-desc">A tree-based representation of your HTML document. Every tag becomes a node; every node is a JS object you can read, modify, create, or delete in real time.</div>
+      <div class="card-meta">
+        <div class="meta-row"><span class="meta-key">Root</span><span>document</span></div>
+        <div class="meta-row"><span class="meta-key">Standard</span><span>W3C / WHATWG</span></div>
+        <div class="meta-row"><span class="meta-key">Controls</span><span>HTML content, structure, styling</span></div>
+      </div>
+    </div>
+    <div class="concept-card bom">
+      <div class="card-icon">🌐</div>
+      <div class="card-title"><span class="bom-text">Browser Object Model</span></div>
+      <div class="card-desc">A collection of objects exposing browser functionality — navigation, history, screen info, timers, storage. Everything outside the document itself.</div>
+      <div class="card-meta">
+        <div class="meta-row"><span class="meta-key">Root</span><span>window</span></div>
+        <div class="meta-row"><span class="meta-key">Standard</span><span>No formal standard</span></div>
+        <div class="meta-row"><span class="meta-key">Controls</span><span>URL, history, alerts, timers, storage</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DOM SECTION -->
+<section id="dom-section">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="section-badge dom">DOM — Document Object Model</span>
+      <h2><span class="dom-text">The Document</span> as a Living Tree</h2>
+      <p>When a browser loads HTML, it parses the markup and builds a tree of objects in memory. This tree is the DOM — and JavaScript can read and rewrite every node of it.</p>
+    </div>
+
+    <div class="tree-container fade-in">
+      <div class="tree-title">DOM Tree Structure</div>
+      <div class="tree-node"><span class="node-tag window">window</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← global object (BOM)</span></div>
+      <div class="tree-node"><span class="tree-indent">└─ </span><span class="node-tag document">document</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← entry point to DOM</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp; └─ </span><span class="node-tag html">&lt;html&gt;</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├─ </span><span class="node-tag dom-el">&lt;head&gt;</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │&nbsp; └─ </span><span class="node-tag dom-el">&lt;title&gt;</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">text node inside</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └─ </span><span class="node-tag dom-el">&lt;body&gt;</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├─ </span><span class="node-tag dom-el">&lt;div id="app"&gt;</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │&nbsp; ├─ </span><span class="node-tag dom-el">&lt;h1&gt;</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">Element node</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │&nbsp; └─ </span><span class="node-tag dom-el">&lt;p&gt;</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">Element node</span></div>
+      <div class="tree-node"><span class="tree-indent">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └─ </span><span class="node-tag dom-el">&lt;button&gt;</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">Element node</span></div>
+    </div>
+
+    <div class="fade-in">
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+          <div class="code-title">dom-examples.js</div>
+        </div>
+        <pre><span class="cm">// ── SELECTING ELEMENTS ─────────────────────────────</span>
+<span class="kw">const</span> <span class="dom-h">byId</span>    = <span class="obj">document</span>.<span class="fn">getElementById</span>(<span class="str">'app'</span>)
+<span class="kw">const</span> <span class="dom-h">byQuery</span> = <span class="obj">document</span>.<span class="fn">querySelector</span>(<span class="str">'.btn'</span>)
+<span class="kw">const</span> <span class="dom-h">allBtns</span> = <span class="obj">document</span>.<span class="fn">querySelectorAll</span>(<span class="str">'button'</span>)
+<span class="kw">const</span> <span class="dom-h">byTag</span>   = <span class="obj">document</span>.<span class="fn">getElementsByTagName</span>(<span class="str">'p'</span>)
+
+<span class="cm">// ── READING &amp; MODIFYING CONTENT ────────────────────</span>
+<span class="obj">element</span>.innerHTML   = <span class="str">'&lt;strong&gt;Hello&lt;/strong&gt;'</span>
+<span class="obj">element</span>.textContent = <span class="str">'Plain text only'</span>
+<span class="obj">element</span>.<span class="fn">setAttribute</span>(<span class="str">'data-id'</span>, <span class="str">'42'</span>)
+<span class="obj">element</span>.<span class="fn">getAttribute</span>(<span class="str">'href'</span>)
+
+<span class="cm">// ── CREATING &amp; INSERTING NODES ─────────────────────</span>
+<span class="kw">const</span> <span class="dom-h">div</span> = <span class="obj">document</span>.<span class="fn">createElement</span>(<span class="str">'div'</span>)
+<span class="dom-h">div</span>.className   = <span class="str">'card'</span>
+<span class="dom-h">div</span>.textContent = <span class="str">'Dynamic content!'</span>
+<span class="obj">document</span>.body.<span class="fn">appendChild</span>(<span class="dom-h">div</span>)
+<span class="obj">document</span>.body.<span class="fn">removeChild</span>(<span class="dom-h">div</span>)
+
+<span class="cm">// ── STYLING ────────────────────────────────────────</span>
+<span class="obj">element</span>.style.color   = <span class="str">'#00e5ff'</span>
+<span class="obj">element</span>.style.display = <span class="str">'none'</span>
+<span class="obj">element</span>.classList.<span class="fn">add</span>(<span class="str">'active'</span>)
+<span class="obj">element</span>.classList.<span class="fn">toggle</span>(<span class="str">'visible'</span>)
+
+<span class="cm">// ── EVENTS ─────────────────────────────────────────</span>
+<span class="obj">element</span>.<span class="fn">addEventListener</span>(<span class="str">'click'</span>, (e) =&gt; {
+  <span class="obj">console</span>.<span class="fn">log</span>(<span class="str">'Clicked!'</span>, e.target)
+})
+
+<span class="cm">// ── TRAVERSAL ──────────────────────────────────────</span>
+<span class="obj">element</span>.parentNode
+<span class="obj">element</span>.children
+<span class="obj">element</span>.firstElementChild
+<span class="obj">element</span>.nextElementSibling</pre>
+      </div>
+    </div>
+
+    <div class="api-grid fade-in">
+      <div class="api-card dom">
+        <div class="api-name dom">querySelector()</div>
+        <div class="api-desc">Returns the first element matching a CSS selector. Most versatile selector method.</div>
+        <div class="api-example">document.querySelector('#nav .link')</div>
+      </div>
+      <div class="api-card dom">
+        <div class="api-name dom">createElement()</div>
+        <div class="api-desc">Creates a new HTML element node that can be inserted into the DOM.</div>
+        <div class="api-example">const el = document.createElement('div')</div>
+      </div>
+      <div class="api-card dom">
+        <div class="api-name dom">addEventListener()</div>
+        <div class="api-desc">Attaches an event handler for click, keyup, scroll, and hundreds of other events.</div>
+        <div class="api-example">el.addEventListener('click', handler)</div>
+      </div>
+      <div class="api-card dom">
+        <div class="api-name dom">classList API</div>
+        <div class="api-desc">Add, remove, toggle, and check CSS classes on any element cleanly.</div>
+        <div class="api-example">el.classList.toggle('active')</div>
+      </div>
+      <div class="api-card dom">
+        <div class="api-name dom">innerHTML / textContent</div>
+        <div class="api-desc">Get or set the HTML or plain-text content of an element.</div>
+        <div class="api-example">el.textContent = 'Hello world'</div>
+      </div>
+      <div class="api-card dom">
+        <div class="api-name dom">dataset</div>
+        <div class="api-desc">Access custom data-* attributes as a DOMStringMap on any element.</div>
+        <div class="api-example">el.dataset.userId // data-user-id</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- BOM SECTION -->
+<section id="bom-section">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="section-badge bom">BOM — Browser Object Model</span>
+      <h2><span class="bom-text">The Browser</span> as Your API</h2>
+      <p>Beyond the document lies the browser itself. The BOM gives JavaScript access to navigation, history, screen data, timers, storage — all hanging off the global <code style="font-family:monospace;color:var(--bom-color)">window</code> object.</p>
+    </div>
+
+    <div class="tree-container fade-in">
+      <div class="tree-title">BOM Object Hierarchy (all on window)</div>
+      <div class="tree-node"><span class="node-tag window">window</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← the global scope itself</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">location</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← URL, pathname, hash, redirect</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">history</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← back(), forward(), pushState()</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">navigator</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← userAgent, language, online, geolocation</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">screen</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← width, height, colorDepth</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">localStorage</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← persistent key-value storage</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">sessionStorage</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← tab-scoped storage</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">setTimeout / setInterval</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← timer APIs</span></div>
+      <div class="tree-node"><span class="tree-indent">├─ </span><span class="node-tag bom-el">fetch / XMLHttpRequest</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← network requests</span></div>
+      <div class="tree-node"><span class="tree-indent">└─ </span><span class="node-tag document">document</span>&nbsp;&nbsp;<span style="color:var(--text-muted);font-size:0.75rem">← the entire DOM lives here too</span></div>
+    </div>
+
+    <div class="fade-in">
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dots"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div></div>
+          <div class="code-title">bom-examples.js</div>
+        </div>
+        <pre><span class="cm">// ── window.location ────────────────────────────────</span>
+<span class="bom-h">location</span>.href        <span class="cm">// full URL string</span>
+<span class="bom-h">location</span>.hostname    <span class="cm">// e.g. "example.com"</span>
+<span class="bom-h">location</span>.pathname    <span class="cm">// e.g. "/products/shoes"</span>
+<span class="bom-h">location</span>.search      <span class="cm">// e.g. "?color=red&amp;size=10"</span>
+<span class="bom-h">location</span>.hash        <span class="cm">// e.g. "#section-2"</span>
+<span class="bom-h">location</span>.<span class="fn">assign</span>(<span class="str">'https://google.com'</span>)  <span class="cm">// navigate</span>
+<span class="bom-h">location</span>.<span class="fn">reload</span>()                      <span class="cm">// refresh page</span>
+
+<span class="cm">// ── window.history ─────────────────────────────────</span>
+<span class="bom-h">history</span>.<span class="fn">back</span>()
+<span class="bom-h">history</span>.<span class="fn">forward</span>()
+<span class="bom-h">history</span>.<span class="fn">go</span>(-<span class="num">2</span>)        <span class="cm">// go 2 pages back</span>
+<span class="bom-h">history</span>.<span class="fn">pushState</span>({}, <span class="str">''</span>, <span class="str">'/new-url'</span>)   <span class="cm">// SPA routing</span>
+<span class="bom-h">history</span>.<span class="fn">replaceState</span>({}, <span class="str">''</span>, <span class="str">'/updated'</span>) <span class="cm">// no new entry</span>
+
+<span class="cm">// ── window.navigator ───────────────────────────────</span>
+<span class="bom-h">navigator</span>.userAgent      <span class="cm">// browser/OS string</span>
+<span class="bom-h">navigator</span>.language       <span class="cm">// e.g. "en-US"</span>
+<span class="bom-h">navigator</span>.onLine         <span class="cm">// true / false</span>
+<span class="bom-h">navigator</span>.cookieEnabled
+<span class="bom-h">navigator</span>.geolocation.<span class="fn">getCurrentPosition</span>(pos =&gt; {
+  <span class="obj">console</span>.<span class="fn">log</span>(pos.coords.latitude, pos.coords.longitude)
+})
+
+<span class="cm">// ── window.screen ──────────────────────────────────</span>
+<span class="bom-h">screen</span>.width        <span class="cm">// physical screen width</span>
+<span class="bom-h">screen</span>.height
+<span class="bom-h">window</span>.innerWidth   <span class="cm">// viewport width (more useful)</span>
+<span class="bom-h">window</span>.innerHeight
+
+<span class="cm">// ── Timers ─────────────────────────────────────────</span>
+<span class="kw">const</span> id = <span class="fn">setTimeout</span>(() =&gt; <span class="obj">console</span>.<span class="fn">log</span>(<span class="str">'delayed'</span>), <span class="num">2000</span>)
+<span class="fn">clearTimeout</span>(id)
+<span class="kw">const</span> iid = <span class="fn">setInterval</span>(() =&gt; <span class="obj">console</span>.<span class="fn">log</span>(<span class="str">'tick'</span>), <span class="num">1000</span>)
+<span class="fn">clearInterval</span>(iid)
+
+<span class="cm">// ── Storage ────────────────────────────────────────</span>
+<span class="bom-h">localStorage</span>.<span class="fn">setItem</span>(<span class="str">'theme'</span>, <span class="str">'dark'</span>)
+<span class="bom-h">localStorage</span>.<span class="fn">getItem</span>(<span class="str">'theme'</span>)      <span class="cm">// → 'dark'</span>
+<span class="bom-h">localStorage</span>.<span class="fn">removeItem</span>(<span class="str">'theme'</span>)
+<span class="bom-h">sessionStorage</span>.<span class="fn">setItem</span>(<span class="str">'token'</span>, <span class="str">'abc'</span>)
+
+<span class="cm">// ── Dialogs ────────────────────────────────────────</span>
+<span class="fn">alert</span>(<span class="str">'Hello!'</span>)
+<span class="kw">const</span> ok  = <span class="fn">confirm</span>(<span class="str">'Are you sure?'</span>)  <span class="cm">// → boolean</span>
+<span class="kw">const</span> val = <span class="fn">prompt</span>(<span class="str">'Enter name:'</span>)      <span class="cm">// → string</span></pre>
+      </div>
+    </div>
+
+    <div class="api-grid fade-in">
+      <div class="api-card bom">
+        <div class="api-name bom">window.location</div>
+        <div class="api-desc">Full URL access and navigation control. Essential for SPAs and redirect logic.</div>
+        <div class="api-example">location.pathname // '/about'</div>
+      </div>
+      <div class="api-card bom">
+        <div class="api-name bom">window.history</div>
+        <div class="api-desc">Navigate browser history and manipulate URL without page reload via pushState.</div>
+        <div class="api-example">history.pushState({}, '', '/new')</div>
+      </div>
+      <div class="api-card bom">
+        <div class="api-name bom">window.navigator</div>
+        <div class="api-desc">Device and browser info — user agent, language, online status, geolocation.</div>
+        <div class="api-example">navigator.language // 'en-US'</div>
+      </div>
+      <div class="api-card bom">
+        <div class="api-name bom">localStorage</div>
+        <div class="api-desc">Persistent key-value storage that survives page refreshes and browser restarts.</div>
+        <div class="api-example">localStorage.setItem('k', 'v')</div>
+      </div>
+      <div class="api-card bom">
+        <div class="api-name bom">setTimeout / setInterval</div>
+        <div class="api-desc">Schedule code to run once after a delay, or repeatedly at a given interval.</div>
+        <div class="api-example">setTimeout(fn, 1000)</div>
+      </div>
+      <div class="api-card bom">
+        <div class="api-name bom">window.screen</div>
+        <div class="api-desc">Physical display dimensions and color depth of the user's monitor.</div>
+        <div class="api-example">screen.width + 'x' + screen.height</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- COMPARISON -->
+<section id="compare">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="section-badge neutral">Side by Side</span>
+      <h2>DOM <span class="muted-text">vs</span> BOM</h2>
+      <p>A direct comparison across the dimensions that matter most.</p>
+    </div>
+    <div class="fade-in">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th class="dom-col">DOM</th>
+            <th class="bom-col">BOM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Full Name</td>
+            <td class="dom-val">Document Object Model</td>
+            <td class="bom-val">Browser Object Model</td>
+          </tr>
+          <tr>
+            <td>Root Object</td>
+            <td class="dom-val">document</td>
+            <td class="bom-val">window</td>
+          </tr>
+          <tr>
+            <td>Represents</td>
+            <td class="dom-val">HTML document as a node tree</td>
+            <td class="bom-val">Browser environment around the document</td>
+          </tr>
+          <tr>
+            <td>Standard</td>
+            <td class="dom-val">✅ W3C / WHATWG formal spec</td>
+            <td class="bom-val">⚠️ No formal standard — browser-specific</td>
+          </tr>
+          <tr>
+            <td>Cross-browser</td>
+            <td class="dom-val">Highly consistent</td>
+            <td class="bom-val">Mostly consistent, some quirks</td>
+          </tr>
+          <tr>
+            <td>Key Objects</td>
+            <td class="dom-val">document, Element, Node, Event</td>
+            <td class="bom-val">location, history, navigator, screen</td>
+          </tr>
+          <tr>
+            <td>Primary Use</td>
+            <td class="dom-val">Manipulate page content &amp; structure</td>
+            <td class="bom-val">Navigation, storage, timers, environment</td>
+          </tr>
+          <tr>
+            <td>Node.js?</td>
+            <td class="dom-val">Via jsdom library</td>
+            <td class="bom-val">❌ Browser-only</td>
+          </tr>
+          <tr>
+            <td>Relationship</td>
+            <td class="dom-val">document lives inside window</td>
+            <td class="bom-val">window wraps and contains document</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- PLAYGROUND -->
+<section id="playground">
+  <div class="container">
+    <div class="section-header fade-in">
+      <span class="section-badge dom">Live Playground</span>
+      <h2>See It <span class="dom-text">In Action</span></h2>
+      <p>Click the buttons below to execute real DOM and BOM operations and see the results instantly.</p>
+    </div>
+
+    <div class="demo-panel fade-in">
+      <div class="demo-header">
+        <div class="demo-dot"></div>
+        DOM Operations
+      </div>
+      <div class="demo-body">
+        <div id="demo-box">← This element will be manipulated by the DOM demos below</div>
+        <div class="demo-controls">
+          <button class="btn dom" onclick="domDemo('text')">Change Text</button>
+          <button class="btn dom" onclick="domDemo('color')">Change Color</button>
+          <button class="btn dom" onclick="domDemo('append')">Append Child</button>
+          <button class="btn dom" onclick="domDemo('style')">Toggle Style</button>
+          <button class="btn dom" onclick="domDemo('attr')">Read Attribute</button>
+          <button class="btn clear" onclick="resetDemo()">Reset</button>
+        </div>
+        <div class="demo-output" id="dom-log">
+          <div class="log-line">
+            <span class="log-time">ready</span>
+            <span class="log-tag dom">DOM</span>
+            <span class="log-msg" style="color:var(--text-muted)">Click buttons above to run DOM operations...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-panel fade-in">
+      <div class="demo-header">
+        <div class="demo-dot bom"></div>
+        BOM Operations
+      </div>
+      <div class="demo-body">
+        <div class="demo-controls">
+          <button class="btn bom" onclick="bomDemo('url')">Read URL</button>
+          <button class="btn bom" onclick="bomDemo('screen')">Screen Info</button>
+          <button class="btn bom" onclick="bomDemo('navigator')">Navigator Info</button>
+          <button class="btn bom" onclick="bomDemo('storage')">LocalStorage</button>
+          <button class="btn bom" onclick="bomDemo('timer')">Run Timer</button>
+          <button class="btn bom" onclick="bomDemo('viewport')">Viewport Size</button>
+          <button class="btn clear" onclick="clearBomLog()">Clear</button>
+        </div>
+        <div class="demo-output" id="bom-log">
+          <div class="log-line">
+            <span class="log-time">ready</span>
+            <span class="log-tag bom">BOM</span>
+            <span class="log-msg" style="color:var(--text-muted)">Click buttons above to run BOM operations...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-title"><span class="dom-text">DOM</span> <span class="muted-text">&amp;</span> <span class="bom-text">BOM</span></div>
+    <div class="footer-sub">JavaScript Web APIs — Complete Reference Guide</div>
+  </div>
+</footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(el => {
+      if (el.isIntersecting) { el.target.classList.add('visible'); observer.unobserve(el.target); }
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+  let childCount = 0, styleToggle = false;
+
+  function log(id, tag, msg) {
+    const now = new Date();
+    const time = now.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const div = document.createElement('div');
+    div.className = 'log-line';
+    div.innerHTML = `<span class="log-time">${time}</span><span class="log-tag ${tag}">${tag.toUpperCase()}</span><span class="log-msg">${msg}</span>`;
+    const logEl = document.getElementById(id + '-log');
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function domDemo(action) {
+    const box = document.getElementById('demo-box');
+    if (action === 'text') {
+      const texts = ['Hello from the DOM! 👋', 'textContent was updated!', 'DOM is alive!', 'JavaScript is powerful ✨'];
+      box.textContent = texts[Math.floor(Math.random() * texts.length)];
+      log('dom', 'dom', `box.textContent = "${box.textContent}"`);
+    } else if (action === 'color') {
+      const colors = ['#00e5ff','#ff6b35','#50fa7b','#bd93f9','#f1fa8c','#ff79c6'];
+      const c = colors[Math.floor(Math.random() * colors.length)];
+      box.style.borderColor = c; box.style.color = c; box.style.background = c + '15';
+      log('dom', 'dom', `box.style.color = "${c}"`);
+    } else if (action === 'append') {
+      childCount++;
+      const child = document.createElement('span');
+      child.textContent = ` [node-${childCount}]`;
+      child.style.cssText = 'background:rgba(0,229,255,0.2);color:#00e5ff;border-radius:4px;padding:2px 6px;margin-left:4px;font-size:0.75rem;';
+      box.appendChild(child);
+      log('dom', 'dom', `createElement('span') → appendChild() → children: ${box.children.length}`);
+    } else if (action === 'style') {
+      styleToggle = !styleToggle;
+      box.style.transform = styleToggle ? 'scale(1.04)' : 'scale(1)';
+      box.style.transition = 'transform 0.3s';
+      log('dom', 'dom', `style.transform = "${box.style.transform}" via classList.toggle`);
+    } else if (action === 'attr') {
+      box.setAttribute('data-demo', 'active-' + Date.now());
+      log('dom', 'dom', `setAttribute('data-demo', ...) → getAttribute: "${box.getAttribute('data-demo')}"`);
+    }
+  }
+
+  function resetDemo() {
+    const box = document.getElementById('demo-box');
+    box.textContent = '← This element will be manipulated by the DOM demos below';
+    box.removeAttribute('style'); box.removeAttribute('data-demo');
+    childCount = 0; styleToggle = false;
+    log('dom', 'dom', 'Element reset to initial state');
+  }
+
+  let timerRunning = false, timerId = null, tick = 0;
+
+  function bomDemo(action) {
+    if (action === 'url') {
+      log('bom', 'bom', `location.href = "${location.href}"`);
+      log('bom', 'bom', `location.pathname = "${location.pathname}"`);
+    } else if (action === 'screen') {
+      log('bom', 'bom', `screen: ${screen.width} × ${screen.height}px`);
+      log('bom', 'bom', `viewport: ${window.innerWidth} × ${window.innerHeight}px`);
+      log('bom', 'bom', `devicePixelRatio = ${window.devicePixelRatio}`);
+    } else if (action === 'navigator') {
+      log('bom', 'bom', `navigator.language = "${navigator.language}"`);
+      log('bom', 'bom', `navigator.onLine = ${navigator.onLine}`);
+      log('bom', 'bom', `navigator.cookieEnabled = ${navigator.cookieEnabled}`);
+      log('bom', 'bom', `userAgent = "${navigator.userAgent.slice(0,55)}..."`);
+    } else if (action === 'storage') {
+      const val = 'value-' + Date.now();
+      localStorage.setItem('bom-demo', val);
+      log('bom', 'bom', `localStorage.setItem('bom-demo', '${val}')`);
+      log('bom', 'bom', `localStorage.getItem('bom-demo') = "${localStorage.getItem('bom-demo')}"`);
+      localStorage.removeItem('bom-demo');
+      log('bom', 'bom', `localStorage.removeItem('bom-demo') → cleaned up`);
+    } else if (action === 'timer') {
+      if (!timerRunning) {
+        timerRunning = true; tick = 0;
+        log('bom', 'bom', 'setInterval() started — firing every 500ms for 5 ticks...');
+        timerId = setInterval(() => {
+          tick++;
+          log('bom', 'bom', `⏱ tick #${tick} — ${tick * 500}ms elapsed`);
+          if (tick >= 5) { clearInterval(timerId); timerRunning = false; log('bom', 'bom', 'clearInterval() called — timer stopped'); }
+        }, 500);
+      } else {
+        log('bom', 'bom', 'Timer already running — wait for it to complete');
+      }
+    } else if (action === 'viewport') {
+      log('bom', 'bom', `innerWidth × innerHeight = ${window.innerWidth} × ${window.innerHeight}`);
+      log('bom', 'bom', `scrollY = ${window.scrollY}px | scrollX = ${window.scrollX}px`);
+      log('bom', 'bom', `document height = ${document.documentElement.scrollHeight}px`);
+    }
+  }
+
+  function clearBomLog() {
+    const logEl = document.getElementById('bom-log');
+    logEl.innerHTML = '<div class="log-line"><span class="log-time">clear</span><span class="log-tag bom">BOM</span><span class="log-msg" style="color:var(--text-muted)">Log cleared. Run more operations...</span></div>';
+  }
+</script>
+</body>
+</html>
